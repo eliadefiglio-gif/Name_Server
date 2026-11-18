@@ -6,8 +6,7 @@ from enum import nonmember
 
 logging.basicConfig(
         level=logging.DEBUG,
-        format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
-        datefmt='%H:%M:%S'
+        format=' [%(levelname)s] %(name)s: %(message)s'
     )
 
 class Client:
@@ -30,7 +29,7 @@ class Client:
         self.reader = None
         self.writer = None
 
-    async def servizio(self):
+    async def time(self):
         logging.info("Interfaccia comandi avviata. Digita 'QUIT' per uscire.")
 
         while True:
@@ -51,6 +50,30 @@ class Client:
             messaggio = json.loads(messaggio.decode().strip())
             if messaggio["status"] == "ok":
                 logging.info(messaggio["time"])
+            elif messaggio["status"] == "error":
+                logging.error(f"Errore nella comunicazione. Error_code: {messaggio['message']}")
+
+    async def echo(self):
+        logging.info("Interfaccia comandi avviata. Digita 'QUIT' per uscire.")
+
+        while True:
+            testo = await asyncio.to_thread(input)
+            if testo == "QUIT" or self.writer.is_closing():
+                break
+
+            comando = {"cmd": "echo", "text": testo}
+            self.writer.write(f"{json.dumps(comando)}\n".encode())
+            await self.writer.drain()
+
+            messaggio = await self.reader.readline()
+
+            if not messaggio:
+                logging.warning("Il server ha chiuso la connessione.")
+                break
+
+            messaggio = json.loads(messaggio.decode().strip())
+            if messaggio["status"] == "ok":
+                logging.info(messaggio["text"])
             elif messaggio["status"] == "error":
                 logging.error(f"Errore nella comunicazione. Error_code: {messaggio['message']}")
 
@@ -85,7 +108,10 @@ class Client:
             await self.connetti(host_servizio, port_servizio)
             logging.info(f"Connessione avviata col servizio {service}")
 
-            await self.servizio()
+            if service == "time":
+                await self.time()
+            elif service == "echo":
+                await self.echo()
 
         except Exception as e:
             logging.error("Errore nel recuperare il servizio")

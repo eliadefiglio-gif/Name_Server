@@ -111,7 +111,7 @@ class TimeServer:
                 comando = dati.decode().strip()
                 try:
                     comando = json.loads(comando)
-                    logging.info(f"[NAME_SERVER_RICEVUTO] {comando} da {indirizzo}")
+                    logging.info(f"[TIME_SERVER_RICEVUTO] {comando} da {indirizzo}")
                     await self.esegui_comando(comando, writer)
                 except json.decoder.JSONDecodeError:
                     logging.error("JSON malformato")
@@ -138,16 +138,26 @@ class EchoServer:
 
     async def pubblica(self, writer, messaggio):
 
-        logging.info(f"[PUBBLICAZIONE]: {messaggio}")
+        messaggio = json.dumps(messaggio)
+        logging.info(f"[ECHO_SERVER_PUBBLICAZIONE]: {messaggio}")
         try:
             writer.write(f"{messaggio}\n".encode())
             await writer.drain()
         except ConnectionError:
             logging.error("Invio fallito")
 
+    async def esegui_comando(self, comando, writer):
+
+        if comando["cmd"] == "echo":
+            messaggio = {"status": "ok", "text": comando["text"] }
+            await self.pubblica(writer, messaggio)
+        else:
+            messaggio = {"status": "error", "message": "UNKNOWN_COMMAND"}
+            await self.pubblica(writer, messaggio)
+
     async def gestisci_client(self, reader, writer):
         indirizzo = writer.get_extra_info("peername")
-        logging.info(f"[CONNESSIONE] {indirizzo}")
+        logging.info(f"[ECHO_SERVER_CONNESSIONE] {indirizzo}")
 
         try:
             while True:
@@ -155,12 +165,18 @@ class EchoServer:
                 if not dati:
                     break
                 comando = dati.decode().strip()
-                logging.info(f"[RICEVUTO] {comando} da {indirizzo}")
-                await self.esegui_comando(comando, writer, indirizzo)
+                try:
+                    comando = json.loads(comando)
+                    logging.info(f"[ECHO_SERVER_RICEVUTO] {comando} da {indirizzo}")
+                    await self.esegui_comando(comando, writer)
+                except json.decoder.JSONDecodeError:
+                    logging.error("JSON malformato")
+                    messaggio = {"status": "error", "message": "INVALID_JSON"}
+                    await self.pubblica(writer, messaggio)
         except ConnectionError:
             pass
         finally:
-            logging.info(f"[DISCONNESSIONE] {indirizzo}")
+            logging.info(f"[ECHO_SERVER_DISCONNESSIONE] {indirizzo}")
             writer.close()
             await writer.wait_closed()
 
@@ -174,9 +190,9 @@ class EchoServer:
 async def main():
     ns = NameServer()
     ts = TimeServer()
-    #es = EchoServer()
+    es = EchoServer()
 
-    await asyncio.gather(ns.avvia(), ts.avvia())
+    await asyncio.gather(ns.avvia(), ts.avvia(), es.avvia())
 
 
 if __name__ == '__main__':
